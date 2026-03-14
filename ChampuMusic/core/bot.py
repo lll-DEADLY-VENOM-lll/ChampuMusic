@@ -1,19 +1,14 @@
+# Copyright (C) 2024 by THE-VIP-BOY-OP@Github, <https://github.com/THE-VIP-BOY-OP>.
+# This file is part of <https://github.com/THE-VIP-BOY-OP/VIP-MUSIC> project.
+
 import asyncio
+import threading
 import uvloop
-
-# --- Event Loop Fix for Python 3.10+ ---
-try:
-    loop = asyncio.get_event_loop()
-except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-# uvloop install karna fast performance ke liye
-uvloop.install()
-
 import pyrogram
-from pyrogram import Client
+from flask import Flask
+from pyrogram import Client, idle
 from pyrogram.enums import ChatMemberStatus
+from pyrogram.errors import ChatWriteForbidden, PeerIdInvalid
 from pyrogram.types import (
     BotCommand,
     BotCommandScopeAllChatAdministrators,
@@ -22,21 +17,30 @@ from pyrogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
 )
-from pyrogram.errors.exceptions.forbidden_403 import ChatWriteForbidden
-import config
 
+import config
 from ..logging import LOGGER
 
+uvloop.install()
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is running"
+
+def run():
+    app.run(host="0.0.0.0", port=8000, debug=False)
 
 class ChampuBot(Client):
     def __init__(self):
-        LOGGER(__name__).info(f"sᴛᴀʀᴛɪɴɢ ʙᴏᴛ...")
+        LOGGER(__name__).info("Starting Bot")
         super().__init__(
             "ChampuMusic",
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             bot_token=config.BOT_TOKEN,
-            sleep_threshold=180, # Additional safety for flood waits
+            ipv6=False, # <--- यहाँ IPv4 सुनिश्चित करने के लिए 'ipv6=False' जोड़ा गया है
         )
 
     async def start(self):
@@ -47,118 +51,62 @@ class ChampuBot(Client):
         self.name = get_me.first_name + " " + (get_me.last_name or "")
         self.mention = get_me.mention
 
-        # Create the button
         button = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        text="๏ ᴀᴅᴅ ᴍᴇ ɪɴ ɢʀᴏᴜᴘ ๏",
-                        url=f"https://t.me/{self.username}?startgroup=true",
-                    )
-                ]
-            ]
+            [[InlineKeyboardButton(text="๏ ᴀᴅᴅ ᴍᴇ ɪɴ ɢʀᴏᴜᴘ ๏", url=f"https://t.me/{self.username}?startgroup=true")]]
         )
 
-        # Try to send a message to the logger group
-        if config.LOGGER_ID:
+        if config.LOG_GROUP_ID:
             try:
+                # ID ko number (int) mein badalna zaroori hai
+                LOGGER_ID = int(config.LOG_GROUP_ID)
+                
                 await self.send_photo(
-                    config.LOGGER_ID,
+                    chat_id=LOGGER_ID,
                     photo=config.START_IMG_URL,
-                    caption=f"╔════❰𝗪𝗘𝗟𝗖𝗢𝗠𝗘❱════❍⊱❁۪۪\n║\n║┣⪼🥀ʙᴏᴛ sᴛᴀʀᴛᴇᴅ🎉\n║\n║┣⪼ {self.name}\n║\n║┣⪼🎈ɪᴅ:- `{self.id}` \n║\n║┣⪼🎄@{self.username} \n║ \n║┣⪼💖ᴛʜᴀɴᴋs ғᴏʀ ᴜsɪɴɢ😍\n║\n╚════════════════❍⊱❁",
+                    caption=f"╔════❰𝐖𝐄𝐋𝐂𝐎𝐌𝐄❱════❍⊱❁۪۪\n║\n║┣⪼🥀𝐁𝐨𝐭 𝐒𝐭𝐚𝐫𝐭𝐞𝐝 𝐁𝐚𝐛𝐲🎉\n║\n║┣⪼ {self.name}\n║\n║┣⪼🎈𝐈𝐃:- `{self.id}` \n║\n║┣⪼🎄@{self.username} \n║ \n║┣⪼💖𝐓𝐡𝐚𝐧𝐤𝐬 𝐅𝐨𝐫 𝐔𝐬𝐢𝐧𝐠😍\n║\n╚════════════════❍⊱❁",
                     reply_markup=button,
                 )
+            except PeerIdInvalid:
+                LOGGER(__name__).error("Log Group Error: Bot ko log group mein admin banayein aur wahan /start likhein!")
             except ChatWriteForbidden:
-                LOGGER(__name__).error("Bot cannot write to the log group. Make sure it has permissions.")
+                LOGGER(__name__).error("Log Group Error: Bot ke paas message bhejne ki permission nahi hai!")
             except Exception as e:
-                LOGGER(__name__).error(f"Unexpected error while sending to log group: {e}")
-                try:
-                    await self.send_message(
-                        config.LOGGER_ID,
-                        f"╔═══❰𝗪𝗘𝗟𝗖𝗢𝗠𝗘❱═══❍⊱❁۪۪\n║\n║┣⪼🥀ʙᴏᴛ sᴛᴀʀᴛᴇᴅ🎉\n║\n║◈ {self.name}\n║\n║┣⪼🎈ɪᴅ:- `{self.id}` \n║\n║┣⪼🎄@{self.username} \n║ \n║┣⪼💖ᴛʜᴀɴᴋs ғᴏʀ ᴜsɪɴɢ😍\n║\n╚══════════════❍⊱❁",
-                        reply_markup=button,
-                    )
-                except Exception:
-                    pass
+                LOGGER(__name__).error(f"Unexpected Log Group Error: {e}")
         else:
-            LOGGER(__name__).warning(
-                "LOGGER_ID is not set, skipping log group notifications."
-            )
+            LOGGER(__name__).warning("LOG_GROUP_ID set nahi hai, startup message skip kar diya.")
 
-        # Setting commands
         if config.SET_CMDS:
             try:
                 await self.set_bot_commands(
                     commands=[
-                        BotCommand("start", "sᴛᴀʀᴛ ᴛʜᴇ ʙᴏᴛ"),
-                        BotCommand("help", "ɢᴇᴛ ᴛʜᴇ ʜᴇʟᴘ ᴍᴇɴᴜ"),
-                        BotCommand("ping", "ᴄʜᴇᴄᴋ ʙᴏᴛ ɪs ᴀʟɪᴠᴇ ᴏʀ ᴅᴇᴀᴅ"),
+                        BotCommand("start", "Start the bot"),
+                        BotCommand("help", "Get the help menu"),
+                        BotCommand("ping", "Check if the bot is alive or dead"),
                     ],
                     scope=BotCommandScopeAllPrivateChats(),
                 )
                 await self.set_bot_commands(
                     commands=[
-                        BotCommand("play", "Start playing requested song"),
-                        BotCommand("stop", "Stop the current song"),
-                        BotCommand("pause", "Pause the current song"),
-                        BotCommand("resume", "Resume the paused song"),
-                        BotCommand("queue", "Check the queue of songs"),
-                        BotCommand("skip", "Skip the current song"),
-                        BotCommand("volume", "Adjust the music volume"),
-                        BotCommand("lyrics", "Get lyrics of the song"),
+                        BotCommand("play", "❥ Play the requested song"),
+                        BotCommand("stop", "❥ Stop the song"),
+                        BotCommand("pause", "❥ Pause the song"),
+                        BotCommand("resume", "❥ Resume the song"),
+                        BotCommand("skip", "❥ Skip the current song"),
                     ],
                     scope=BotCommandScopeAllGroupChats(),
-                )
-                await self.set_bot_commands(
-                    commands=[
-                        BotCommand("start", "❥ ✨ᴛᴏ sᴛᴀʀᴛ ᴛʜᴇ ʙᴏᴛ✨"),
-                        BotCommand("ping", "❥ 🍁ᴛᴏ ᴄʜᴇᴄᴋ ᴛʜᴇ ᴘɪɴɢ🍁"),
-                        BotCommand("help", "❥ 🥺ᴛᴏ ɢᴇᴛ ʜᴇʟᴘ🥺"),
-                        BotCommand("vctag", "❥ 😇ᴛᴀɢᴀʟʟ ғᴏʀ ᴠᴄ🙈"),
-                        BotCommand("stopvctag", "❥ 📍sᴛᴏᴘ ᴛᴀɢᴀʟʟ ғᴏʀ ᴠᴄ 💢"),
-                        BotCommand("tagall", "❥ 🔻ᴛᴀɢ ᴀʟʟ ᴍᴇᴍʙᴇʀs ʙʏ ᴛᴇxᴛ🔻"),
-                        BotCommand("cancel", "❥ 🔻ᴄᴀɴᴄᴇʟ ᴛʜᴇ ᴛᴀɢɢɪɴɢ🔻"),
-                        BotCommand("settings", "❥ 🔻ᴛᴏ ɢᴇᴛ ᴛʜᴇ sᴇᴛᴛɪɴɢs🔻"),
-                        BotCommand("reload", "❥ 🪐ᴛᴏ ʀᴇʟᴏᴀᴅ ᴛʜᴇ ʙᴏᴛ🪐"),
-                        BotCommand("play", "❥ ❣️ᴛᴏ ᴘʟᴀʏ ᴛʜᴇ sᴏɴɢ❣️"),
-                        BotCommand("vplay", "❥ ❣️ᴛᴏ ᴘʟᴀʏ ᴛʜᴇ ᴍᴜsɪᴄ ᴡɪᴛʜ ᴠɪᴅᴇᴏ❣️"),
-                        BotCommand("pause", "❥ 🥀ᴛᴏ ᴘᴀᴜsᴇ ᴛʜᴇ sᴏɴɢs🥀"),
-                        BotCommand("resume", "❥ 💖ᴛᴏ ʀᴇsᴜᴍᴇ ᴛʜᴇ sᴏɴɢ💖"),
-                        BotCommand("end", "❥ 🐚ᴛᴏ ᴇᴍᴘᴛʏ ᴛʜᴇ ϙᴜᴇᴜᴇ🐚"),
-                        BotCommand("queue", "❥ 🤨ᴛᴏ ᴄʜᴇᴄᴋ ᴛʜᴇ ϙᴜᴇᴜᴇ🤨"),
-                        BotCommand("playlist", "❥ 🕺ᴛᴏ ɢᴇᴛ ᴛʜᴇ ᴘʟᴀʏʟɪsᴛ🕺"),
-                        BotCommand("stop", "❥ ❤‍🔥ᴛᴏ sᴛᴏᴘ ᴛʜᴇ sᴏɴɢs❤‍🔥"),
-                        BotCommand("lyrics", "❥ 🕊️ᴛᴏ ɢᴇᴛ ᴛʜᴇ ʟʏʀɪᴄs🕊️"),
-                        BotCommand("song", "❥ 🔸ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ ᴛʜᴇ sᴏɴɢ🔸"),
-                        BotCommand("video", "❥ 🔸ᴛᴏ ᴅᴏᴡɴʟᴏᴀᴅ ᴛʜᴇ ᴠɪᴅᴇᴏ sᴏɴɢ🔸"),
-                        BotCommand("gali", "❥ 🔻ᴛᴏ ʀᴇᴘʟʏ ғᴏʀ ғᴜɴ🔻"),
-                        BotCommand("shayri", "❥ 🔻ᴛᴏ ɢᴇᴛ ᴀ sʜᴀʏᴀʀɪ🔻"),
-                        BotCommand("love", "❥ 🔻ᴛᴏ ɢᴇᴛ ᴀ ʟᴏᴠᴇ sʜᴀʏᴀʀɪ🔻"),
-                        BotCommand("sudolist", "❥ 🌱ᴛᴏ ᴄʜᴇᴄᴋ ᴛʜᴇ sᴜᴅᴏʟɪsᴛ🌱"),
-                        BotCommand("owner", "❥ 💝ᴛᴏ ᴄʜᴇᴄᴋ ᴛʜᴇ ᴏᴡɴᴇʀ💝"),
-                        BotCommand("update", "❥ 🐲ᴛᴏ ᴜᴘᴅᴀᴛᴇ ʙᴏᴛ🐲"),
-                        BotCommand("gstats", "❥ 💘ᴛᴏ sᴛᴀᴛs ᴏғ ᴛʜᴇ ʙᴏᴛ💘"),
-                        BotCommand("repo", "❥ 🍌ᴛᴏ ᴄʜᴇᴄᴋ ᴛʜᴇ 𝚁𝙴𝙿𝙾🍌"),
-                    ],
-                    scope=BotCommandScopeAllChatAdministrators(),
                 )
             except Exception as e:
                 LOGGER(__name__).error(f"Failed to set bot commands: {e}")
 
-        # Check if bot is an admin in the logger group
-        if config.LOGGER_ID:
-            try:
-                chat_member_info = await self.get_chat_member(
-                    config.LOGGER_ID, self.id
-                )
-                if chat_member_info.status != ChatMemberStatus.ADMINISTRATOR:
-                    LOGGER(__name__).error(
-                        "Please promote Bot as Admin in Logger Group"
-                    )
-            except Exception as e:
-                LOGGER(__name__).error(f"Error occurred while checking bot status: {e}")
-
         LOGGER(__name__).info(f"MusicBot Started as {self.name}")
 
-    async def stop(self):
-        await super().stop()
+async def anony_boot():
+    bot = ChampuBot()
+    await bot.start()
+    await idle()
+
+if __name__ == "__main__":
+    t = threading.Thread(target=run)
+    t.daemon = True
+    t.start()
+    asyncio.run(anony_boot())
