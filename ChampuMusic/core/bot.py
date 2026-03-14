@@ -1,4 +1,3 @@
-# Copyright (C) 2024 by THE-VIP-BOY-OP@Github
 import asyncio
 import threading
 import uvloop
@@ -8,31 +7,33 @@ from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors import ChatWriteForbidden, PeerIdInvalid
 from pyrogram.types import (
     BotCommand,
-    BotCommandScopeAllChatAdministrators,
     BotCommandScopeAllGroupChats,
     BotCommandScopeAllPrivateChats,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
 )
 
-import config
+import config  # यह config.py को इम्पोर्ट कर रहा है
 from ..logging import LOGGER
 
 uvloop.install()
 
-# Flask for Keep-Alive (Render/Heroku)
+# Flask for Health Checks
 app = Flask(__name__)
 
 @app.route("/")
 def home():
-    return "Bot is running"
+    return "Bot is alive and running!"
 
 def run_flask():
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    try:
+        app.run(host="0.0.0.0", port=8000, debug=False)
+    except Exception as e:
+        print(f"Flask Error: {e}")
 
 class ChampuBot(Client):
     def __init__(self):
-        LOGGER(__name__).info("Starting Bot...")
+        LOGGER(__name__).info("Initializing Champu Bot...")
         super().__init__(
             "ChampuMusic",
             api_id=config.API_ID,
@@ -53,61 +54,53 @@ class ChampuBot(Client):
             [[InlineKeyboardButton(text="๏ ᴀᴅᴅ ᴍᴇ ɪɴ ɢʀᴏᴜᴘ ๏", url=f"https://t.me/{self.username}?startgroup=true")]]
         )
 
-        # LOG_GROUP_ID Check
-        if hasattr(config, 'LOG_GROUP_ID') and config.LOG_GROUP_ID:
+        # LOG_GROUP_ID Logic (Fixing the Warning)
+        log_id = getattr(config, 'LOG_GROUP_ID', None)
+
+        if log_id:
             try:
-                LOGGER_ID = int(config.LOG_GROUP_ID)
                 await self.send_photo(
-                    chat_id=LOGGER_ID,
-                    photo=config.START_IMG_URL if hasattr(config, 'START_IMG_URL') else None,
+                    chat_id=int(log_id),
+                    photo=getattr(config, 'START_IMG_URL', None),
                     caption=f"╔════❰𝐖𝐄𝐋𝐂𝐎𝐌𝐄❱════❍⊱❁۪۪\n║\n║┣⪼🥀𝐁𝐨𝐭 𝐒𝐭𝐚𝐫𝐭𝐞𝐝 𝐁𝐚𝐛𝐲🎉\n║\n║┣⪼ {self.name}\n║\n║┣⪼🎈𝐈𝐃:- `{self.id}` \n║\n║┣⪼🎄@{self.username} \n║ \n║┣⪼💖𝐓𝐡𝐚𝐧𝐤𝐬 𝐅𝐨𝐫 𝐔𝐬𝐢𝐧𝐠😍\n║\n╚════════════════❍⊱❁",
                     reply_markup=button,
                 )
+                LOGGER(__name__).info(f"Startup message sent to Log Group: {log_id}")
             except (PeerIdInvalid, ValueError):
-                LOGGER(__name__).error("Log Group ID galat hai ya Bot group mein nahi hai!")
+                LOGGER(__name__).error("LOG_GROUP_ID invalid hai! Check karein ki ID -100 se start ho.")
             except ChatWriteForbidden:
-                LOGGER(__name__).error("Bot ke paas Log Group mein message bhejne ki permission nahi hai!")
+                LOGGER(__name__).error("Bot log group mein admin nahi hai ya message nahi bhej sakta!")
             except Exception as e:
-                LOGGER(__name__).error(f"Unexpected Log Error: {e}")
+                LOGGER(__name__).error(f"Startup Error: {e}")
         else:
-            LOGGER(__name__).warning("LOG_GROUP_ID config mein nahi mila. Startup message skip kiya gaya.")
+            LOGGER(__name__).warning("LOG_GROUP_ID config.py mein nahi mila!")
 
-        # Commands Set Karne ke liye
-        if hasattr(config, 'SET_CMDS') and config.SET_CMDS:
+        # Set Commands
+        if getattr(config, 'SET_CMDS', False):
             try:
                 await self.set_bot_commands(
-                    commands=[
-                        BotCommand("start", "Start the bot"),
-                        BotCommand("help", "Get the help menu"),
-                        BotCommand("ping", "Check bot status"),
-                    ],
-                    scope=BotCommandScopeAllPrivateChats(),
+                    [BotCommand("start", "Start Bot"), BotCommand("ping", "Check Status")],
+                    scope=BotCommandScopeAllPrivateChats()
                 )
                 await self.set_bot_commands(
-                    commands=[
-                        BotCommand("play", "Play song"),
-                        BotCommand("stop", "Stop music"),
-                        BotCommand("pause", "Pause music"),
-                        BotCommand("resume", "Resume music"),
-                        BotCommand("skip", "Skip current song"),
-                    ],
-                    scope=BotCommandScopeAllGroupChats(),
+                    [BotCommand("play", "Play Music"), BotCommand("skip", "Skip Song")],
+                    scope=BotCommandScopeAllGroupChats()
                 )
             except Exception as e:
-                LOGGER(__name__).error(f"Failed to set commands: {e}")
+                LOGGER(__name__).error(f"Commands set nahi ho paaye: {e}")
 
-        LOGGER(__name__).info(f"MusicBot Started as {self.name}")
+        LOGGER(__name__).info(f"MusicBot Started as @{self.username}")
 
-async def anony_boot():
+async def main():
     bot = ChampuBot()
     await bot.start()
     await idle()
 
 if __name__ == "__main__":
-    # Flask ko separate thread mein chalayein
+    # Start Flask Server
     t = threading.Thread(target=run_flask)
     t.daemon = True
     t.start()
     
-    # Bot ko main loop mein chalayein
-    asyncio.run(anony_boot())
+    # Start Bot
+    asyncio.run(main())
