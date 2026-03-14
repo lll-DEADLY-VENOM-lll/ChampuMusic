@@ -1,5 +1,14 @@
+import asyncio
 import uvloop
 
+# --- Event Loop Fix for Python 3.10+ ---
+try:
+    loop = asyncio.get_event_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+# uvloop install karna fast performance ke liye
 uvloop.install()
 
 import pyrogram
@@ -27,14 +36,16 @@ class ChampuBot(Client):
             api_id=config.API_ID,
             api_hash=config.API_HASH,
             bot_token=config.BOT_TOKEN,
+            sleep_threshold=180, # Additional safety for flood waits
         )
+
     async def start(self):
         await super().start()
         get_me = await self.get_me()
         self.username = get_me.username
         self.id = get_me.id
-        self.name = self.me.first_name + " " + (self.me.last_name or "")
-        self.mention = self.me.mention
+        self.name = get_me.first_name + " " + (get_me.last_name or "")
+        self.mention = get_me.mention
 
         # Create the button
         button = InlineKeyboardMarkup(
@@ -57,20 +68,18 @@ class ChampuBot(Client):
                     caption=f"╔════❰𝗪𝗘𝗟𝗖𝗢𝗠𝗘❱════❍⊱❁۪۪\n║\n║┣⪼🥀ʙᴏᴛ sᴛᴀʀᴛᴇᴅ🎉\n║\n║┣⪼ {self.name}\n║\n║┣⪼🎈ɪᴅ:- `{self.id}` \n║\n║┣⪼🎄@{self.username} \n║ \n║┣⪼💖ᴛʜᴀɴᴋs ғᴏʀ ᴜsɪɴɢ😍\n║\n╚════════════════❍⊱❁",
                     reply_markup=button,
                 )
-            except pyrogram.errors.ChatWriteForbidden as e:
-                LOGGER(__name__).error(f"Bot cannot write to the log group: {e}")
+            except ChatWriteForbidden:
+                LOGGER(__name__).error("Bot cannot write to the log group. Make sure it has permissions.")
+            except Exception as e:
+                LOGGER(__name__).error(f"Unexpected error while sending to log group: {e}")
                 try:
                     await self.send_message(
                         config.LOGGER_ID,
                         f"╔═══❰𝗪𝗘𝗟𝗖𝗢𝗠𝗘❱═══❍⊱❁۪۪\n║\n║┣⪼🥀ʙᴏᴛ sᴛᴀʀᴛᴇᴅ🎉\n║\n║◈ {self.name}\n║\n║┣⪼🎈ɪᴅ:- `{self.id}` \n║\n║┣⪼🎄@{self.username} \n║ \n║┣⪼💖ᴛʜᴀɴᴋs ғᴏʀ ᴜsɪɴɢ😍\n║\n╚══════════════❍⊱❁",
                         reply_markup=button,
                     )
-                except Exception as e:
-                    LOGGER(__name__).error(f"Failed to send message in log group: {e}")
-            except Exception as e:
-                LOGGER(__name__).error(
-                    f"Unexpected error while sending to log group: {e}"
-                )
+                except Exception:
+                    pass
         else:
             LOGGER(__name__).warning(
                 "LOGGER_ID is not set, skipping log group notifications."
@@ -150,3 +159,6 @@ class ChampuBot(Client):
                 LOGGER(__name__).error(f"Error occurred while checking bot status: {e}")
 
         LOGGER(__name__).info(f"MusicBot Started as {self.name}")
+
+    async def stop(self):
+        await super().stop()
