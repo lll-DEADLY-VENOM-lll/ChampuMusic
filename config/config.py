@@ -15,7 +15,7 @@ API_HASH = getenv("API_HASH", "")
 BOT_TOKEN = getenv("BOT_TOKEN", "")
 
 # Get Your bot username
-BOT_USERNAME = getenv("BOT_USERNAME" , "aera_music_bot)
+BOT_USERNAME = getenv("BOT_USERNAME" , "aera_music_bot")
 
 # Get your mongo url from cloud.mongodb.com
 MONGO_DB_URI = getenv("MONGO_DB_URI", None)
