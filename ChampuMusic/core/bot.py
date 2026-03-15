@@ -1,10 +1,11 @@
 import asyncio
 import threading
 import uvloop
+import logging
 from flask import Flask
 from pyrogram import Client, idle
 from pyrogram.enums import ChatMemberStatus
-from pyrogram.errors import ChatWriteForbidden, PeerIdInvalid
+from pyrogram.errors import ChatWriteForbidden, PeerIdInvalid, FloodWait
 from pyrogram.types import (
     BotCommand,
     BotCommandScopeAllGroupChats,
@@ -13,10 +14,12 @@ from pyrogram.types import (
     InlineKeyboardMarkup,
 )
 
-import config  # config.py se data load ho raha hai
-import logging
+import config  # config.py file ko import kar raha hai
 
-# Basic Logging Setup (Agar aapka alag se logger nahi hai)
+# UVLOOP Optimization
+uvloop.install()
+
+# LOGGING SETUP
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s - %(levelname)s] - %(name)s - %(message)s",
@@ -24,9 +27,7 @@ logging.basicConfig(
 )
 LOGGER = logging.getLogger("ChampuBot")
 
-uvloop.install()
-
-# Flask for Health Checks (Uptime ke liye)
+# FLASK FOR HEALTH CHECKS (Uptime ke liye)
 app = Flask(__name__)
 
 @app.route("/")
@@ -35,11 +36,12 @@ def home():
 
 def run_flask():
     try:
-        # Port 8000 default hai (Koyeb/Render ke liye)
+        # Port 8000 default hai (Render/Koyeb ke liye perfect)
         app.run(host="0.0.0.0", port=8000, debug=False)
     except Exception as e:
         LOGGER.error(f"Flask Error: {e}")
 
+# BOT CLASS
 class ChampuBot(Client):
     def __init__(self):
         LOGGER.info("Initializing Champu Bot...")
@@ -59,76 +61,95 @@ class ChampuBot(Client):
         self.name = f"{get_me.first_name} {get_me.last_name or ''}"
         self.mention = get_me.mention
 
+        # Startup Button
         button = InlineKeyboardMarkup(
             [[InlineKeyboardButton(text="๏ ᴀᴅᴅ ᴍᴇ ɪɴ ɢʀᴏᴜᴘ ๏", url=f"https://t.me/{self.username}?startgroup=true")]]
         )
 
-        # LOG_GROUP_ID Logic
+        # LOG_GROUP_ID LOGIC
         log_id = getattr(config, 'LOG_GROUP_ID', None)
 
         if log_id:
             try:
+                # Group ID ko integer mein confirm karna
+                chat_id = int(log_id)
+                
                 await self.send_photo(
-                    chat_id=log_id,
-                    photo=getattr(config, 'START_IMG_URL', None),
-                    caption=f"╔════❰𝐖𝐄𝐋𝐂𝐎𝐌𝐄❱════❍⊱❁۪۪\n║\n║┣⪼🥀𝐁𝐨𝐭 𝐒𝐭𝐚𝐫𝐭𝐞𝐝 𝐁𝐚𝐛𝐲🎉\n║\n║┣⪼ {self.name}\n║\n║┣⪼🎈𝐈𝐃:- `{self.id}` \n║\n║┣⪼🎄@{self.username} \n║ \n║┣⪼💖𝐓𝐡𝐚𝐧𝐤𝐬 𝐅𝐨𝐫 𝐔𝐬𝐢𝐧𝐠😍\n║\n╚════════════════❍⊱❁",
+                    chat_id=chat_id,
+                    photo=config.START_IMG_URL,
+                    caption=(
+                        f"╔════❰ 𝐖𝐄𝐋𝐂𝐎𝐌𝐄 ❱════❍⊱❁۪۪\n"
+                        f"║\n"
+                        f"║┣⪼ 🥀 𝐁𝐨𝐭 𝐒𝐭𝐚𝐫𝐭𝐞𝐝 𝐁𝐚𝐛𝐲 🎉\n"
+                        f"║\n"
+                        f"║┣⪼ {self.name}\n"
+                        f"║\n"
+                        f"║┣⪼ 🎈 𝐈𝐃:- `{self.id}`\n"
+                        f"║\n"
+                        f"║┣⪼ 🎄 @{self.username}\n"
+                        f"║\n"
+                        f"║┣⪼ 💖 𝐓𝐡𝐚𝐧𝐤𝐬 𝐅𝐨𝐫 𝐔𝐬𝐢𝐧𝐠 😍\n"
+                        f"║\n"
+                        f"╚════════════════❍⊱❁"
+                    ),
                     reply_markup=button,
                 )
-                LOGGER.info(f"Startup message sent to Log Group: {log_id}")
-            except (PeerIdInvalid, ValueError):
-                LOGGER.error("LOG_GROUP_ID invalid hai! Check karein ki ID -100 se start ho rahi hai.")
+                LOGGER.info(f"Startup message sent to Log Group: {chat_id}")
+            except PeerIdInvalid:
+                LOGGER.error("LOG_GROUP_ID Invalid hai! Bot ko pehle us group mein add karke admin banayein.")
             except ChatWriteForbidden:
-                LOGGER.error("Bot log group mein admin nahi hai ya message bhejni ki permission nahi hai!")
+                LOGGER.error("Bot ko log group mein message bhejne ki permission nahi hai (Admin nahi hai).")
+            except FloodWait as e:
+                await asyncio.sleep(e.value)
             except Exception as e:
-                LOGGER.error(f"Startup Error: {e}")
+                LOGGER.error(f"Startup Message Error: {e}")
         else:
-            LOGGER.warning("LOG_GROUP_ID config.py mein nahi mila!")
+            LOGGER.warning("LOG_GROUP_ID config.py mein missing hai! Log group message nahi jayega.")
 
-        # Set Bot Commands
-        if getattr(config, 'SET_CMDS', False):
+        # SET BOT COMMANDS
+        if config.SET_CMDS:
             try:
                 await self.set_bot_commands(
                     [
-                        BotCommand("start", "Start Bot"), 
-                        BotCommand("ping", "Check Status"),
-                        BotCommand("help", "Get Help")
+                        BotCommand("start", "Start the Bot"),
+                        BotCommand("help", "Get Help Menu"),
+                        BotCommand("ping", "Check Bot Status"),
                     ],
                     scope=BotCommandScopeAllPrivateChats()
                 )
                 await self.set_bot_commands(
                     [
-                        BotCommand("play", "Play Music"), 
-                        BotCommand("skip", "Skip Song"),
-                        BotCommand("stop", "Stop Music")
+                        BotCommand("play", "Play Music"),
+                        BotCommand("skip", "Skip Current Song"),
+                        BotCommand("stop", "Stop Music"),
+                        BotCommand("vc", "VC Control"),
                     ],
                     scope=BotCommandScopeAllGroupChats()
                 )
-                LOGGER.info("Bot commands have been set successfully.")
+                LOGGER.info("Bot commands auto-set successfully.")
             except Exception as e:
                 LOGGER.error(f"Commands set nahi ho paaye: {e}")
 
-        LOGGER.info(f"MusicBot Started as @{self.username}")
+        LOGGER.info(f"MusicBot Started successfully as @{self.username}")
 
     async def stop(self):
         await super().stop()
         LOGGER.info("Bot Stopped. Bye!")
 
+# MAIN RUN FUNCTION
 async def main():
     bot = ChampuBot()
     await bot.start()
     await idle()
 
 if __name__ == "__main__":
-    # 1. Start Flask in a separate thread
+    # 1. Flask server ko alag thread mein chalayein
     t = threading.Thread(target=run_flask)
     t.daemon = True
     t.start()
     
-    # 2. Start Pyrogram Bot
-    loop = asyncio.get_event_loop()
+    # 2. Bot ko run karein
     try:
-        loop.run_until_complete(main())
+        asyncio.run(main())
     except KeyboardInterrupt:
         pass
-    finally:
-        loop.close()
