@@ -39,7 +39,7 @@ EXTRA_PLUGINS = getenv(
 # Fill here the external plugins repo where plugins that you want to load
 EXTRA_PLUGINS_REPO = getenv(
     "EXTRA_PLUGINS_REPO",
-    "",
+    "https://github.com/lll-DEADLY-VENOM-lll/Extra_Plugin",
 )
 
 # Your folder name in your extra plugins repo where all plugins stored
