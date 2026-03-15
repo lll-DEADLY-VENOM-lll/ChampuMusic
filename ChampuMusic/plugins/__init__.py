@@ -12,7 +12,7 @@ from ChampuMusic import LOGGER
 
 logger = LOGGER(__name__)
 
-
+# Pehle se maujood folders ko clean karna
 if EXTRA_PLUGINS_FOLDER in os.listdir():
     shutil.rmtree(EXTRA_PLUGINS_FOLDER)
 
@@ -20,10 +20,13 @@ if "utils" in os.listdir():
     shutil.rmtree("utils")
 
 ROOT_DIR = abspath(join(dirname(__file__), "..", ".."))
-
 EXTERNAL_REPO_PATH = join(ROOT_DIR, EXTRA_PLUGINS_FOLDER)
 
-extra_plugins_enabled = EXTRA_PLUGINS.lower() == "true"
+# FIX: AttributeError handle karne ke liye check
+if isinstance(EXTRA_PLUGINS, bool):
+    extra_plugins_enabled = EXTRA_PLUGINS
+else:
+    extra_plugins_enabled = str(EXTRA_PLUGINS).lower() == "true"
 
 if extra_plugins_enabled:
     if not os.path.exists(EXTERNAL_REPO_PATH):
